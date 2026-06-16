@@ -14,19 +14,33 @@ existing automation runner is not imported or modified.
 ## Setup
 
 ```bash
+cd /scratch/rnerolu/codeshare/projects/codex_rag_runner
 python3.11 -m venv /scratch/rnerolu/codex-rag/venv
 /scratch/rnerolu/codex-rag/venv/bin/pip install -r requirements.txt
 cp config.example.json config.json
 ```
 
-Edit `config.json` with the GitHub repo and token environment variable.
+Edit `config.json` with the GitHub repo and token. You can either set
+`github.token` directly in the ignored local config, or set `github.token_env`
+to the name of an environment variable that contains the token.
 
 ## Commands
 
+Run these from the RAG runner repo:
+
 ```bash
+cd /scratch/rnerolu/codeshare/projects/codex_rag_runner
 /scratch/rnerolu/codex-rag/venv/bin/python -m rag_index --config config.json --rebuild
 /scratch/rnerolu/codex-rag/venv/bin/python -m rag_runner --config config.json --once --dry-run
 /scratch/rnerolu/codex-rag/venv/bin/python -m rag_runner --config config.json --loop
+```
+
+Or run them from any directory with absolute paths:
+
+```bash
+/scratch/rnerolu/codex-rag/venv/bin/python /scratch/rnerolu/codeshare/projects/codex_rag_runner/rag_index.py --config /scratch/rnerolu/codeshare/projects/codex_rag_runner/config.json --rebuild
+cd /scratch/rnerolu/codeshare/projects/codex_rag_runner && /scratch/rnerolu/codex-rag/venv/bin/python -m rag_runner --config /scratch/rnerolu/codeshare/projects/codex_rag_runner/config.json --once --dry-run
+cd /scratch/rnerolu/codeshare/projects/codex_rag_runner && /scratch/rnerolu/codex-rag/venv/bin/python -m rag_runner --config /scratch/rnerolu/codeshare/projects/codex_rag_runner/config.json --loop
 ```
 
 ## Answer Contract

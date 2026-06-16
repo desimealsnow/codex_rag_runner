@@ -4,7 +4,7 @@ import pathlib
 
 from rag_runner.config import DEFAULT_CONFIG, deep_merge
 from rag_runner.corpus import chunk_source, discover_source_files, read_source_file
-from rag_runner.github_client import Issue
+from rag_runner.github_client import Issue, github_token
 from rag_runner.prompting import build_grounded_prompt
 from rag_runner.runner import parse_context, parse_task
 from rag_runner.vector_store import RetrievedChunk, patch_sqlite
@@ -89,3 +89,18 @@ def test_patch_sqlite_enables_newer_sqlite() -> None:
     import sqlite3
 
     assert tuple(int(part) for part in sqlite3.sqlite_version.split(".")[:2]) >= (3, 35)
+
+
+def test_github_token_accepts_literal_token() -> None:
+    assert github_token({"token": "ghp_direct"}) == "ghp_direct"
+    assert github_token({"github_token": "ghp_legacy"}) == "ghp_legacy"
+
+
+def test_github_token_accepts_token_env_name(monkeypatch) -> None:
+    monkeypatch.setenv("RAG_TEST_TOKEN", "ghp_from_env")
+
+    assert github_token({"token_env": "RAG_TEST_TOKEN"}) == "ghp_from_env"
+
+
+def test_github_token_accepts_token_misplaced_in_token_env() -> None:
+    assert github_token({"token_env": "github_pat_example"}) == "github_pat_example"

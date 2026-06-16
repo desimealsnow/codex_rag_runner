@@ -26,7 +26,7 @@ class GitHubClient:
         self.config = config
         github = config.get("github") or {}
         token_env = str(github.get("token_env") or "GITHUB_TOKEN")
-        self.token = os.environ.get(token_env, "")
+        self.token = github_token(github)
         self.api_url = str(github.get("api_url") or "https://api.github.com").rstrip("/")
         self.owner = str(github.get("owner") or "")
         self.repo = str(github.get("repo") or "")
@@ -84,3 +84,18 @@ class GitHubClient:
             self.request("DELETE", "/repos/{}/{}/issues/{}/labels/{}".format(self.owner, self.repo, issue_number, encoded))
         except GitHubError:
             return
+
+
+def github_token(github: Dict[str, Any]) -> str:
+    configured = str(github.get("token") or github.get("github_token") or "").strip()
+    if configured:
+        return configured
+    token_env = str(github.get("token_env") or "GITHUB_TOKEN").strip()
+    if looks_like_github_token(token_env):
+        return token_env
+    return os.environ.get(token_env, "")
+
+
+def looks_like_github_token(value: str) -> bool:
+    text = str(value or "").strip()
+    return text.startswith(("github_pat_", "ghp_", "gho_", "ghu_", "ghs_", "ghr_"))
