@@ -6,7 +6,7 @@ from rag_runner.config import DEFAULT_CONFIG, deep_merge
 from rag_runner.corpus import chunk_source, discover_source_files, read_source_file
 from rag_runner.github_client import Issue, github_token
 from rag_runner.prompting import build_grounded_prompt
-from rag_runner.runner import parse_context, parse_task
+from rag_runner.runner import lock_file, parse_context, parse_task
 from rag_runner.vector_store import RetrievedChunk, patch_sqlite
 
 
@@ -104,3 +104,13 @@ def test_github_token_accepts_token_env_name(monkeypatch) -> None:
 
 def test_github_token_accepts_token_misplaced_in_token_env() -> None:
     assert github_token({"token_env": "github_pat_example"}) == "github_pat_example"
+
+
+def test_lock_file_removes_stale_pid(tmp_path: pathlib.Path) -> None:
+    lock_path = tmp_path / "runner.lock"
+    lock_path.write_text("999999999", encoding="utf-8")
+
+    with lock_file(lock_path):
+        assert lock_path.read_text(encoding="utf-8").strip().isdigit()
+
+    assert not lock_path.exists()

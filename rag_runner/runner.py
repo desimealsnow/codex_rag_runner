@@ -24,7 +24,20 @@ def log(message: str) -> None:
 @contextlib.contextmanager
 def lock_file(path: pathlib.Path) -> Iterator[None]:
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    fd = None
+    for _ in range(2):
+        try:
+            fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            break
+        except FileExistsError:
+            holder = lock_holder(path)
+            if holder and pid_exists(holder):
+                raise RuntimeError("Runner lock already exists at {} for live PID {}".format(path, holder))
+            log("Removing stale runner lock at {}".format(path))
+            with contextlib.suppress(FileNotFoundError):
+                path.unlink()
+    if fd is None:
+        raise RuntimeError("Unable to acquire runner lock at {}".format(path))
     try:
         os.write(fd, str(os.getpid()).encode("utf-8"))
         yield
@@ -32,6 +45,26 @@ def lock_file(path: pathlib.Path) -> Iterator[None]:
         os.close(fd)
         with contextlib.suppress(FileNotFoundError):
             path.unlink()
+
+
+def lock_holder(path: pathlib.Path) -> int:
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace").strip()
+        return int(text)
+    except (FileNotFoundError, TypeError, ValueError):
+        return 0
+
+
+def pid_exists(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
 
 
 def field_value(body: str, field_name: str) -> str:
@@ -83,6 +116,7 @@ def parse_context(issue: Issue) -> str:
 
 def rebuild_index(config: Dict[str, Any]) -> int:
     chunks = load_corpus(config)
+    log("Indexing {} chunks from {}".format(len(chunks), (config.get("rag") or {}).get("source_dir")))
     ChromaIndex(config).rebuild(chunks)
     return len(chunks)
 
@@ -112,8 +146,13 @@ def answer_issue(issue: Issue, config: Dict[str, Any], dry_run: bool = False) ->
 def process_once(config: Dict[str, Any], dry_run: bool = False) -> int:
     client = GitHubClient(config)
     github = config.get("github") or {}
+    queued_label = str(github.get("queued_label") or "codex:queued")
+    log("Polling {}/{} for label {}".format(github.get("owner"), github.get("repo"), queued_label))
     count = 0
-    for issue in client.list_queued_issues():
+    issues = client.list_queued_issues()
+    if not issues:
+        log("No queued issues found")
+    for issue in issues:
         count += 1
         log("Processing issue #{}: {}".format(issue.number, issue.title))
         if not dry_run:
@@ -127,6 +166,7 @@ def process_once(config: Dict[str, Any], dry_run: bool = False) -> int:
                 client.add_comment(issue.number, answer)
                 client.add_labels(issue.number, [str(github.get("done_label") or "codex:done")])
                 client.remove_label(issue.number, str(github.get("running_label") or "codex:running"))
+                log("Completed issue #{}".format(issue.number))
         except Exception as exc:
             message = "RAG runner failed for issue #{}: {}".format(issue.number, exc)
             log(message)
@@ -140,6 +180,10 @@ def process_once(config: Dict[str, Any], dry_run: bool = False) -> int:
 def run(config_path: pathlib.Path, once: bool, loop: bool, dry_run: bool) -> int:
     config = load_config(config_path)
     lock_path = pathlib.Path(str((config.get("runner") or {}).get("lock_file") or "/tmp/codex-rag.lock")).expanduser()
+    github = config.get("github") or {}
+    rag = config.get("rag") or {}
+    log("Starting RAG runner for {}/{} using {}".format(github.get("owner"), github.get("repo"), config_path))
+    log("Watching {} with queued label {}".format(rag.get("source_dir"), github.get("queued_label") or "codex:queued"))
     with lock_file(lock_path):
         while True:
             process_once(config, dry_run=dry_run)
