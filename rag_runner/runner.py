@@ -12,7 +12,7 @@ from .codex_client import run_codex
 from .config import load_config
 from .corpus import load_corpus
 from .github_client import GitHubClient, Issue
-from .prompting import build_grounded_prompt
+from .prompting import build_grounded_prompt, normalize_study_mode
 from .vector_store import ChromaIndex, RetrievedChunk
 
 
@@ -114,6 +114,11 @@ def parse_context(issue: Issue) -> str:
     return "\n".join(context_lines).strip()
 
 
+def parse_study_mode(issue: Issue) -> str:
+    body = issue.body or ""
+    return normalize_study_mode(field_value(body, "Study Mode") or field_value(body, "Operation"))
+
+
 def rebuild_index(config: Dict[str, Any]) -> int:
     chunks = load_corpus(config)
     log("Indexing {} chunks from {}".format(len(chunks), (config.get("rag") or {}).get("source_dir")))
@@ -130,14 +135,15 @@ def retrieve(config: Dict[str, Any], question: str) -> List[RetrievedChunk]:
 def answer_issue(issue: Issue, config: Dict[str, Any], dry_run: bool = False) -> str:
     question = parse_task(issue)
     context = parse_context(issue)
+    study_mode = parse_study_mode(issue)
     if context:
         question = question + "\n\nAdditional user context:\n" + context
     chunks = retrieve(config, question)
     min_support = float((config.get("rag") or {}).get("min_support_score") or 0.2)
-    prompt = build_grounded_prompt(question, chunks, min_support)
+    prompt = build_grounded_prompt(question, chunks, min_support, study_mode)
     work_dir = pathlib.Path(str((config.get("runner") or {}).get("work_dir") or "/tmp/codex-rag-runs")).expanduser() / "issue-{}".format(issue.number)
     result = run_codex(prompt, config, work_dir, dry_run=dry_run)
-    prefix = "RAG answer for issue #{}\n\n".format(issue.number)
+    prefix = "RAG {} response for issue #{}\n\n".format(study_mode, issue.number)
     body = result.body.strip() or "Codex returned no answer."
     max_chars = int((config.get("runner") or {}).get("comment_max_chars") or 60000)
     return (prefix + body)[:max_chars]

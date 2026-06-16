@@ -28,7 +28,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "collection_name": "study_files",
         "chunk_chars": 1800,
         "chunk_overlap": 250,
-        "top_k": 6,
+        "top_k": 8,
         "min_support_score": 0.2,
         "allowed_extensions": [".txt", ".md", ".rst", ".json", ".yaml", ".yml", ".sql", ".py", ".java", ".js", ".html", ".xml"],
     },

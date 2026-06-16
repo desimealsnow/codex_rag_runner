@@ -48,3 +48,18 @@ cd /scratch/rnerolu/codeshare/projects/codex_rag_runner && /scratch/rnerolu/code
 Answers must be grounded in retrieved file chunks. When the configured folder
 does not support an answer, the runner instructs Codex to say so instead of
 guessing.
+
+## Study Modes
+
+The runner reads the GitHub issue `Operation:` field, or an optional
+`Study Mode:` field, and changes the answer shape while keeping the same
+source-grounding rules.
+
+- `ask`: direct answer with explanation and certification-relevant terms.
+- `teach`: step-by-step tutor response with exam importance and self-checks.
+- `quiz`: practice questions plus cited answer key.
+- `flashcards`: concise Q/A cards with citations.
+- `revise`: revision sheet with must-know points, distinctions, and checklist.
+
+Unsupported questions still receive: `The configured files do not cover this
+clearly.`
