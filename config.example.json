@@ -1,0 +1,62 @@
+{
+  "github": {
+    "api_url": "https://api.github.com",
+    "owner": "rameshchandranerolu",
+    "repo": "codex_rag_runner",
+    "token_env": "GITHUB_TOKEN",
+    "queued_label": "codex:queued",
+    "running_label": "codex:running",
+    "done_label": "codex:done",
+    "failed_label": "codex:failed",
+    "allowed_authors": [],
+    "poll_interval_seconds": 30,
+    "request_timeout_seconds": 90
+  },
+  "rag": {
+    "source_dir": "/scratch/rnerolu/codex-rag/files",
+    "index_dir": "/scratch/rnerolu/codex-rag/index",
+    "model_name": "sentence-transformers/all-MiniLM-L6-v2",
+    "model_cache_dir": "/scratch/rnerolu/codex-rag/model-cache",
+    "collection_name": "study_files",
+    "chunk_chars": 1800,
+    "chunk_overlap": 250,
+    "top_k": 6,
+    "min_support_score": 0.2,
+    "allowed_extensions": [
+      ".txt",
+      ".md",
+      ".rst",
+      ".json",
+      ".yaml",
+      ".yml",
+      ".sql",
+      ".py",
+      ".java",
+      ".js",
+      ".html",
+      ".xml"
+    ]
+  },
+  "codex": {
+    "binary": "codex",
+    "sandbox": "workspace-write",
+    "extra_args": [
+      "--skip-git-repo-check",
+      "--config",
+      "approval_policy=on-request",
+      "--config",
+      "model_service_tier=\"instant\"",
+      "--config",
+      "model_reasoning_effort=\"medium\"",
+      "--model",
+      "gpt-5.5"
+    ],
+    "timeout_seconds": 900
+  },
+  "runner": {
+    "work_dir": "/scratch/rnerolu/codex-rag/runs",
+    "lock_file": "/scratch/rnerolu/codex-rag/runner.lock",
+    "max_issues_per_poll": 1,
+    "comment_max_chars": 60000
+  }
+}
