@@ -9,7 +9,7 @@ from typing import Any, Dict
 DEFAULT_CONFIG: Dict[str, Any] = {
     "github": {
         "api_url": "https://api.github.com",
-        "owner": "rameshchandranerolu",
+        "owner": "desimealsnow",
         "repo": "codex_rag_runner",
         "token_env": "GITHUB_TOKEN",
         "queued_label": "codex:queued",
