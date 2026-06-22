@@ -13,14 +13,14 @@
     "request_timeout_seconds": 90
   },
   "rag": {
-    "source_dir": "/scratch/rnerolu/codex-rag/files",
-    "index_dir": "/scratch/rnerolu/codex-rag/index",
+    "source_dir": "./files",
+    "index_dir": "./index",
     "model_name": "sentence-transformers/all-MiniLM-L6-v2",
-    "model_cache_dir": "/scratch/rnerolu/codex-rag/model-cache",
+    "model_cache_dir": "./model-cache",
     "collection_name": "study_files",
-    "chunk_chars": 1800,
-    "chunk_overlap": 250,
-    "top_k": 8,
+    "chunk_chars": 2500,
+    "chunk_overlap": 400,
+    "top_k": 10,
     "min_support_score": 0.2,
     "allowed_extensions": [
       ".txt",
@@ -29,33 +29,22 @@
       ".json",
       ".yaml",
       ".yml",
-      ".sql",
-      ".py",
-      ".java",
-      ".js",
-      ".html",
-      ".xml"
+      ".pdf"
     ]
   },
-  "codex": {
-    "binary": "codex",
-    "sandbox": "workspace-write",
-    "extra_args": [
-      "--skip-git-repo-check",
-      "--config",
-      "approval_policy=on-request",
-      "--config",
-      "model_service_tier=\"instant\"",
-      "--config",
-      "model_reasoning_effort=\"medium\"",
-      "--model",
-      "gpt-5.5"
+  "llm": {
+    "backend": "auto",
+    "timeout_seconds": 300,
+    "claude_args": [
+      "--max-turns", "1",
+      "--no-input"
     ],
-    "timeout_seconds": 900
+    "api_key_env": "GEMINI_API_KEY",
+    "model": "gemini-2.0-flash"
   },
   "runner": {
-    "work_dir": "/scratch/rnerolu/codex-rag/runs",
-    "lock_file": "/scratch/rnerolu/codex-rag/runner.lock",
+    "work_dir": "./runs",
+    "lock_file": "./runner.lock",
     "max_issues_per_poll": 1,
     "comment_max_chars": 60000
   }

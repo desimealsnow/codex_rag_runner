@@ -5,10 +5,11 @@ import datetime as dt
 import os
 import pathlib
 import re
+import sys
 import time
 from typing import Any, Dict, Iterator, List
 
-from .codex_client import run_codex
+from .llm_client import run_llm
 from .config import load_config
 from .corpus import load_corpus
 from .github_client import GitHubClient, Issue
@@ -58,6 +59,19 @@ def lock_holder(path: pathlib.Path) -> int:
 def pid_exists(pid: int) -> bool:
     if pid <= 0:
         return False
+    if sys.platform == "win32":
+        # On Windows, os.kill() behaves differently; use ctypes kernel32 check
+        try:
+            import ctypes
+            kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+            PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+            handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+            if handle:
+                kernel32.CloseHandle(handle)
+                return True
+            return False
+        except Exception:
+            return False
     try:
         os.kill(pid, 0)
         return True
@@ -65,6 +79,8 @@ def pid_exists(pid: int) -> bool:
         return False
     except PermissionError:
         return True
+    except OSError:
+        return False
 
 
 def field_value(body: str, field_name: str) -> str:
@@ -127,9 +143,11 @@ def rebuild_index(config: Dict[str, Any]) -> int:
 
 
 def retrieve(config: Dict[str, Any], question: str) -> List[RetrievedChunk]:
-    rebuild_index(config)
+    """Query the existing vector index. Index must be built beforehand."""
     rag = config.get("rag") or {}
-    return ChromaIndex(config).query(question, int(rag.get("top_k") or 6))
+    index = ChromaIndex(config)
+    min_support = float(rag.get("min_support_score") or 0.2)
+    return index.query(question, int(rag.get("top_k") or 10), min_support_score=min_support)
 
 
 def answer_issue(issue: Issue, config: Dict[str, Any], dry_run: bool = False) -> str:
@@ -141,10 +159,10 @@ def answer_issue(issue: Issue, config: Dict[str, Any], dry_run: bool = False) ->
     chunks = retrieve(config, question)
     min_support = float((config.get("rag") or {}).get("min_support_score") or 0.2)
     prompt = build_grounded_prompt(question, chunks, min_support, study_mode)
-    work_dir = pathlib.Path(str((config.get("runner") or {}).get("work_dir") or "/tmp/codex-rag-runs")).expanduser() / "issue-{}".format(issue.number)
-    result = run_codex(prompt, config, work_dir, dry_run=dry_run)
+    work_dir = pathlib.Path(str((config.get("runner") or {}).get("work_dir") or "./runs")).expanduser() / "issue-{}".format(issue.number)
+    result = run_llm(prompt, config, work_dir, dry_run=dry_run)
     prefix = "RAG {} response for issue #{}\n\n".format(study_mode, issue.number)
-    body = result.body.strip() or "Codex returned no answer."
+    body = result.body.strip() or "LLM returned no answer."
     max_chars = int((config.get("runner") or {}).get("comment_max_chars") or 60000)
     return (prefix + body)[:max_chars]
 
@@ -185,7 +203,7 @@ def process_once(config: Dict[str, Any], dry_run: bool = False) -> int:
 
 def run(config_path: pathlib.Path, once: bool, loop: bool, dry_run: bool) -> int:
     config = load_config(config_path)
-    lock_path = pathlib.Path(str((config.get("runner") or {}).get("lock_file") or "/tmp/codex-rag.lock")).expanduser()
+    lock_path = pathlib.Path(str((config.get("runner") or {}).get("lock_file") or "./runner.lock")).expanduser()
     github = config.get("github") or {}
     rag = config.get("rag") or {}
     log("Starting RAG runner for {}/{} using {}".format(github.get("owner"), github.get("repo"), config_path))

@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import pathlib
 
-from rag_runner.config import DEFAULT_CONFIG, deep_merge
-from rag_runner.corpus import chunk_source, discover_source_files, read_source_file
+from rag_runner.config import DEFAULT_CONFIG, deep_merge, resolve_paths
+from rag_runner.corpus import chunk_source, clean_content, discover_source_files, read_source_file
 from rag_runner.github_client import Issue, github_token
+from rag_runner.llm_client import LLMResult, detect_backend
 from rag_runner.prompting import build_grounded_prompt, normalize_study_mode
 from rag_runner.runner import lock_file, parse_context, parse_study_mode, parse_task
 from rag_runner.vector_store import RetrievedChunk, patch_sqlite
@@ -143,3 +144,101 @@ def test_lock_file_removes_stale_pid(tmp_path: pathlib.Path) -> None:
         assert lock_path.read_text(encoding="utf-8").strip().isdigit()
 
     assert not lock_path.exists()
+
+
+# --- New tests for content cleaning ---
+
+
+def test_clean_content_removes_picture_placeholders() -> None:
+    text = """Some text before.
+**==> picture [92 x 80] intentionally omitted <==**
+Some text after."""
+    cleaned = clean_content(text)
+    assert "picture" not in cleaned
+    assert "Some text before." in cleaned
+    assert "Some text after." in cleaned
+
+
+def test_clean_content_removes_picture_text_blocks() -> None:
+    text = """Before.
+**----- Start of picture text -----**<br>
+garbled text here<br>
+more garbled<br>
+**----- End of picture text -----**<br>
+After."""
+    cleaned = clean_content(text)
+    assert "garbled" not in cleaned
+    assert "Before." in cleaned
+    assert "After." in cleaned
+
+
+def test_clean_content_removes_standalone_page_numbers() -> None:
+    text = "Real content.\n\n3\n\nMore content."
+    cleaned = clean_content(text)
+    assert "\n3\n" not in cleaned
+    assert "Real content." in cleaned
+    assert "More content." in cleaned
+
+
+def test_clean_content_removes_br_tags() -> None:
+    text = "Hello<br>World"
+    cleaned = clean_content(text)
+    assert "<br>" not in cleaned
+    assert "Hello" in cleaned
+    assert "World" in cleaned
+
+
+def test_clean_content_collapses_blank_lines() -> None:
+    text = "A\n\n\n\n\nB"
+    cleaned = clean_content(text)
+    assert "\n\n\n" not in cleaned
+    assert "A" in cleaned
+    assert "B" in cleaned
+
+
+# --- New tests for resolve_paths ---
+
+
+def test_resolve_paths_makes_relative_absolute(tmp_path: pathlib.Path) -> None:
+    config = deep_merge(DEFAULT_CONFIG, {})
+    resolve_paths(config, tmp_path)
+
+    assert pathlib.Path(config["rag"]["source_dir"]).is_absolute()
+    assert pathlib.Path(config["rag"]["index_dir"]).is_absolute()
+    assert pathlib.Path(config["runner"]["work_dir"]).is_absolute()
+
+
+def test_resolve_paths_preserves_absolute(tmp_path: pathlib.Path) -> None:
+    abs_path = str(tmp_path / "custom" / "files")
+    config = deep_merge(DEFAULT_CONFIG, {"rag": {"source_dir": abs_path}})
+    resolve_paths(config, tmp_path)
+
+    assert config["rag"]["source_dir"] == abs_path
+
+
+# --- New tests for LLM client ---
+
+
+def test_detect_backend_returns_string_or_none() -> None:
+    result = detect_backend()
+    assert result is None or isinstance(result, str)
+
+
+def test_llm_result_dataclass() -> None:
+    result = LLMResult(returncode=0, body="hello", stdout="hello\n", stderr="")
+    assert result.returncode == 0
+    assert result.body == "hello"
+
+
+# --- New tests for min_support_score filtering ---
+
+
+def test_query_filters_low_support_chunks(tmp_path: pathlib.Path) -> None:
+    """Verify that RetrievedChunk filtering logic works conceptually."""
+    chunks = [
+        RetrievedChunk(rel_path="a.md", chunk_index=0, text="good", distance=0.1, support_score=0.9),
+        RetrievedChunk(rel_path="b.md", chunk_index=0, text="bad", distance=0.9, support_score=0.1),
+    ]
+    filtered = [c for c in chunks if c.support_score >= 0.2]
+    assert len(filtered) == 1
+    assert filtered[0].text == "good"

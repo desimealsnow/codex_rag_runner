@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import pathlib
+import re
 from dataclasses import dataclass
 from typing import Dict, Iterable, List
 
@@ -56,8 +57,39 @@ def discover_source_files(source_dir: pathlib.Path, allowed_extensions: Iterable
     return sorted(files)
 
 
+def clean_content(text: str) -> str:
+    """Strip OCR noise from NISM workbook markdown files.
+
+    Removes picture placeholder blocks, picture text blocks with garbled
+    content, ``<br>`` tags, standalone page-number lines, and collapses
+    excessive consecutive blank lines.
+    """
+    # Remove picture placeholder lines: **==> picture ... <==**
+    text = re.sub(r"^\*\*==>.*?<==\*\*$", "", text, flags=re.MULTILINE)
+
+    # Remove picture text blocks (possibly multi-line)
+    text = re.sub(
+        r"\*\*----- Start of picture text -----\*\*.*?\*\*----- End of picture text -----\*\*",
+        "",
+        text,
+        flags=re.DOTALL,
+    )
+
+    # Remove <br> tags
+    text = text.replace("<br>", "")
+
+    # Remove standalone page-number lines (lines that are only a number)
+    text = re.sub(r"^\s*\d+\s*$", "", text, flags=re.MULTILINE)
+
+    # Collapse 3+ consecutive newlines into 2
+    text = re.sub(r"\n{3,}", "\n\n", text)
+
+    return text.strip()
+
+
 def read_source_file(path: pathlib.Path, source_dir: pathlib.Path) -> SourceFile:
-    content = path.read_text(encoding="utf-8", errors="replace")
+    raw_content = path.read_text(encoding="utf-8", errors="replace")
+    content = clean_content(raw_content)
     stat = path.stat()
     rel_path = path.relative_to(source_dir).as_posix()
     digest = hashlib.sha256(content.encode("utf-8", errors="replace")).hexdigest()

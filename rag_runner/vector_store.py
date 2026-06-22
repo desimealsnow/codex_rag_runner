@@ -70,7 +70,7 @@ class ChromaIndex:
             ],
         )
 
-    def query(self, question: str, top_k: int) -> List[RetrievedChunk]:
+    def query(self, question: str, top_k: int, min_support_score: float = 0.0) -> List[RetrievedChunk]:
         result = self.collection.query(query_texts=[question], n_results=top_k, include=["documents", "metadatas", "distances"])
         documents = (result.get("documents") or [[]])[0]
         metadatas = (result.get("metadatas") or [[]])[0]
@@ -87,4 +87,4 @@ class ChromaIndex:
                     support_score=max(0.0, 1.0 - numeric_distance),
                 )
             )
-        return retrieved
+        return [r for r in retrieved if r.support_score >= min_support_score]
