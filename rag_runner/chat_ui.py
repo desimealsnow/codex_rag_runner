@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import pathlib
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
 from .config import DEFAULT_CONFIG, deep_merge, resolve_paths, validate_config
 from .prompting import MODE_INSTRUCTIONS
@@ -90,17 +90,29 @@ def format_stats(session: RagSession) -> str:
     )
 
 
+def _in_colab() -> bool:
+    try:
+        import google.colab  # type: ignore[import-untyped]
+
+        return True
+    except ImportError:
+        return False
+
+
 def create_chat_blocks(session: RagSession):
     """Build the Gradio Blocks UI."""
     import gradio as gr
 
-    def chat(message: str, history: List[Tuple[str, str]], study_mode: str):
+    def chat(message: str, history: List[Dict[str, str]], study_mode: str):
         if not message or not message.strip():
             return history, ""
         session.set_study_mode(study_mode)
         result = session.query(message.strip())
         reply = result.answer + format_sources(result)
-        history = history + [(message.strip(), reply)]
+        history = history + [
+            {"role": "user", "content": message.strip()},
+            {"role": "assistant", "content": reply},
+        ]
         return history, ""
 
     def on_mode_change(study_mode: str):
@@ -124,6 +136,7 @@ def create_chat_blocks(session: RagSession):
                     label="Chat",
                     height=480,
                     show_copy_button=True,
+                    type="messages",
                 )
                 with gr.Row():
                     message = gr.Textbox(
@@ -191,4 +204,5 @@ def launch_chat_ui(
         server_name=host,
         server_port=port,
         show_error=True,
+        debug=_in_colab(),
     )

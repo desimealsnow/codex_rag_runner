@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import pathlib
+import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
@@ -101,16 +102,23 @@ class RagSession:
         return self.study_mode
 
     def query(self, question: str, study_mode: str | None = None) -> QueryResult:
+        from .runner import log
+
         if not self.index:
             raise RuntimeError("Vector index is not built")
 
+        started = time.perf_counter()
         mode = normalize_study_mode(study_mode or self.study_mode)
         rag = self.config.get("rag") or {}
         top_k = int(rag.get("top_k") or 10)
         min_support = float(rag.get("min_support_score") or 0.2)
 
+        retrieve_started = time.perf_counter()
         chunks = self.index.query(question, top_k, min_support_score=min_support)
+        retrieve_seconds = time.perf_counter() - retrieve_started
+
         if not chunks:
+            log("Query retrieve: {:.2f}s | 0 chunks | mode={}".format(retrieve_seconds, mode))
             return QueryResult(
                 answer="No relevant content found in the indexed files for this question.",
                 chunks=[],
@@ -118,20 +126,42 @@ class RagSession:
             )
 
         best_support = max(chunk.support_score for chunk in chunks)
+        log(
+            "Query retrieve: {:.2f}s | {} chunks | best support {:.3f} | mode={}".format(
+                retrieve_seconds,
+                len(chunks),
+                best_support,
+                mode,
+            )
+        )
+
         prompt = build_grounded_prompt(question, chunks, min_support, mode)
         work_dir = (
             pathlib.Path(str((self.config.get("runner") or {}).get("work_dir") or "./runs")).expanduser()
             / "interactive"
         )
+        llm_started = time.perf_counter()
         result = run_llm(prompt, self.config, work_dir, dry_run=self.dry_run)
+        llm_seconds = time.perf_counter() - llm_started
 
         if result.returncode != 0 and not result.body:
             answer = "LLM backend error (code {}): {}".format(
                 result.returncode,
                 result.stderr[:500] if result.stderr else "no output",
             )
+            log("Query LLM: {:.2f}s | failed (code {})".format(llm_seconds, result.returncode))
         else:
             answer = result.body
+            log(
+                "Query LLM: {:.2f}s | prompt {} chars | answer {} chars".format(
+                    llm_seconds,
+                    len(prompt),
+                    len(answer),
+                )
+            )
+
+        total_seconds = time.perf_counter() - started
+        log("Query total: {:.2f}s".format(total_seconds))
 
         return QueryResult(answer=answer, chunks=chunks, best_support=best_support)
 
